@@ -1,4 +1,4 @@
-# 🚀 EKS Fargate GitOps: DevOps Take-Home
+# EKS Fargate GitOps: DevOps Take-Home
 
 [](https://www.terraform.io/)
 [](https://aws.amazon.com/eks/)
@@ -49,7 +49,7 @@ The solution builds a high-availability environment across two Availability Zone
 
 -----
 
-## 🚀 Quick Start Guide
+## Quick Start Guide
 
 ### **Reviewer Validation**
 
