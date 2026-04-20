@@ -169,6 +169,9 @@ kustomize build k8s/overlays/prod | kubectl apply -f -
 
 Terraform workflow (`config.yml`):
 - Runs on manual trigger (`workflow_dispatch`)
+- Takes inputs: `action` (`plan`, `apply`, `destroy`) and `environment` (`staging`, `prod`)
+- Uses Terraform workspace per environment for state isolation
+- Applies environment-specific resource naming (for example, `max-fargate-cluster-staging`)
 - Validates formatting, initialization, and configuration
 - Runs `terraform plan` and saves a plan artifact
 - Applies when the workflow is dispatched against `main`

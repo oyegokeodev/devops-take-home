@@ -1,6 +1,6 @@
 name: Terraform
 
-run-name: "terraform ${{ github.event.inputs.action || 'plan' }} @ ${{ github.ref_name }}"
+run-name: "terraform ${{ github.event.inputs.action || 'plan' }} (${{ github.event.inputs.environment || 'staging' }}) @ ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
@@ -14,6 +14,14 @@ on:
           - plan
           - apply
           - destroy
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
 permissions:
   contents: read
   id-token: write
@@ -28,6 +36,9 @@ jobs:
       TF_IN_AUTOMATION: true
       TF_INPUT: false
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_ENVIRONMENT: ${{ github.event.inputs.environment }}
+      TF_CLUSTER_NAME: max-fargate-cluster-${{ github.event.inputs.environment }}
+      TF_TAGS: '{Project="devops-take-home",ManagedBy="terraform",Environment="${{ github.event.inputs.environment }}"}'
 
     steps:
       - name: Checkout
@@ -59,6 +70,12 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
+      - name: Select Terraform Workspace
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: |
+          terraform workspace select "${TF_ENVIRONMENT}" || terraform workspace new "${TF_ENVIRONMENT}"
+
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
@@ -66,12 +83,20 @@ jobs:
       - name: Terraform Plan
         if: github.event.inputs.action != 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -out=tfplan
+        run: |
+          terraform plan \
+            -var="cluster_name=${TF_CLUSTER_NAME}" \
+            -var="tags=${TF_TAGS}" \
+            -out=tfplan
 
       - name: Terraform Plan Destroy
         if: github.event.inputs.action == 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -destroy -out=tfplan
+        run: |
+          terraform plan -destroy \
+            -var="cluster_name=${TF_CLUSTER_NAME}" \
+            -var="tags=${TF_TAGS}" \
+            -out=tfplan
 
       - name: Save Plan Text
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -80,7 +105,7 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-${{ github.run_number }}
+          name: terraform-plan-${{ env.TF_ENVIRONMENT }}-${{ github.run_number }}
           path: ${{ env.TF_WORKING_DIR }}/tfplan.txt
 
       - name: Enforce main for mutating actions
