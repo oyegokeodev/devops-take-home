@@ -1,0 +1,106 @@
+name: Build and Push App Image
+
+run-name: "image ${{ github.event_name }} @ ${{ github.head_ref || github.ref_name }}"
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - app.py
+      - Dockerfile
+      - requirements.txt
+      - .github/workflows/app-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  build-scan-push:
+    name: Build, Scan, and Push to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE || secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set image metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            DEPLOY_ENV="prod"
+          elif [ "${GITHUB_REF_NAME}" = "develop" ]; then
+            DEPLOY_ENV="staging"
+          else
+            echo "Unsupported branch for this workflow: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          IMAGE_TAG="${SHORT_SHA}-${DEPLOY_ENV}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:${IMAGE_TAG}"
+
+          echo "repo_name=${REPO_NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure ECR repository exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_NAME="${{ steps.meta.outputs.repo_name }}"
+
+          if aws ecr describe-repositories --repository-names "$REPO_NAME" >/dev/null 2>&1; then
+            echo "ECR repository exists: $REPO_NAME"
+          else
+            echo "Creating ECR repository: $REPO_NAME"
+            aws ecr create-repository \
+              --repository-name "$REPO_NAME" \
+              --image-scanning-configuration scanOnPush=true \
+              --image-tag-mutability IMMUTABLE >/dev/null
+          fi
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: docker build -t app-local:${{ steps.meta.outputs.image_tag }} .
+
+      - name: Trivy scan (fail on severity 1 / CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: image
+          image-ref: app-local:${{ steps.meta.outputs.image_tag }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Tag image for ECR
+        run: docker tag app-local:${{ steps.meta.outputs.image_tag }} ${{ steps.meta.outputs.image_uri }}
+
+      - name: Push image to ECR
+        run: docker push ${{ steps.meta.outputs.image_uri }}
+
+      - name: Print published image
+        run: echo "Published image -> ${{ steps.meta.outputs.image_uri }}"

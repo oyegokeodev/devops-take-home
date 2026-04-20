@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: max-app
+resources:
+  - ../../base
+images:
+  - name: max-web
+    newName: REPLACE_WITH_ECR_IMAGE_URI
+    newTag: latest

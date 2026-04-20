@@ -1,0 +1,4 @@
+aws_region   = "us-east-1"
+cluster_name = "max-fargate-cluster"
+eks_version  = "1.29"
+vpc_cidr     = "10.20.0.0/16"
