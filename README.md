@@ -9,8 +9,8 @@ This repository implements the case study with Terraform as the IaC tool of choi
 3. Initialize Terraform, run plan, and apply.
 
 ```bash
-git clone https://github.com/REPLACE_WITH_YOUR_GITHUB_ORG/REPLACE_WITH_YOUR_REPO.git
-cd REPLACE_WITH_YOUR_REPO
+git clone https://github.com/oyegokeodev/devops-take-home.git
+cd devops-take-home
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 make tf_init && make tf_plan && make tf_apply
 ```
@@ -60,7 +60,7 @@ Why Terraform instead of CDK/CloudFormation:
 - Argo CD Image Updater annotations give the application an image alias, restrict updates to the CI tag pattern, and write the selected tag back to Git
 
 4. GitHub Actions CI/CD
-- `.github/workflows/config.yml`: Terraform fmt, init, validate, plan, artifact upload, and apply on push to `main`
+- `.github/workflows/config.yml`: Terraform fmt, init, validate, plan, artifact upload, automatic plan on push to `main`, and manual apply/destroy via `workflow_dispatch`
 - `.github/workflows/app-image.yml`: Docker build, Trivy scan, ECR repository check/create, and image push
 
 ## Repository structure
@@ -158,12 +158,19 @@ make k8s_render
 Update placeholders in the manifest files first:
 - `REPLACE_WITH_ECR_IMAGE_URI`
 - `REPLACE_WITH_ALB_SECURITY_GROUP_ID`
+- `REPLACE_WITH_ECR_REPOSITORY_URI`
 
 Then apply:
 
 ```bash
 kustomize build k8s/overlays/prod | kubectl apply -f -
 ```
+
+### Placeholder preflight
+
+This submission intentionally keeps AWS resource identifiers as placeholders so it remains portable and review-friendly. Before a real deployment, update:
+- `k8s/base/ingress.yaml` with the actual ALB security group ID
+- `k8s/argocd/application.yaml` with the actual ECR repository URI in Image Updater annotations
 
 ## CI/CD behavior
 

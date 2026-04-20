@@ -26,8 +26,7 @@ variable "tags" {
   description = "Common tags"
   type        = map(string)
   default = {
-    Project     = "devops-take-home"
-    ManagedBy   = "terraform"
-    Environment = "prod"
+    Project   = "devops-take-home"
+    ManagedBy = "terraform"
   }
 }

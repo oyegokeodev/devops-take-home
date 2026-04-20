@@ -6,19 +6,19 @@ metadata:
   annotations:
     argocd-image-updater.argoproj.io/image-list: max-web=REPLACE_WITH_ECR_REPOSITORY_URI
     argocd-image-updater.argoproj.io/max-web.update-strategy: newest-build
-    argocd-image-updater.argoproj.io/max-web.allow-tags: regexp:^e[0-9a-f]{7}-(staging|prod)$
+    argocd-image-updater.argoproj.io/max-web.allow-tags: regexp:^[0-9a-f]{7}-(staging|prod)$
     argocd-image-updater.argoproj.io/git-branch: main
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/write-back-target: kustomization
 spec:
   project: default
   source:
-    repoURL: https://github.com/REPLACE_WITH_YOUR_GITHUB_ORG/REPLACE_WITH_YOUR_REPO.git
+    repoURL: https://github.com/oyegokeodev/devops-take-home.git
     targetRevision: main
     path: k8s/overlays/prod
   destination:
     server: https://kubernetes.default.svc
-    namespace: max-app
+    namespace: fincra-hello
   syncPolicy:
     automated:
       prune: true
