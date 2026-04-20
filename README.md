@@ -1,220 +1,114 @@
-# DevOps take-home (Terraform-first)
+# 🚀 EKS Fargate GitOps: DevOps Take-Home
 
-This repository implements the case study with Terraform as the IaC tool of choice.
+[](https://www.terraform.io/)
+[](https://aws.amazon.com/eks/)
+[](https://argoproj.github.io/cd/)
+[](https://github.com/features/actions)
 
-## Installation
+This repository implements a production-hardened **EKS Fargate** landing zone using a **Terraform-first** approach. It leverages **GitOps** for continuous delivery, ensuring that Git remains the single source of truth for both infrastructure and application state.
 
-1. Clone the repository.
-2. Copy the Terraform variables template.
-3. Initialize Terraform, run plan, and apply.
+-----
 
-```bash
-git clone https://github.com/oyegokeodev/devops-take-home.git
-cd devops-take-home
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-make tf_init && make tf_plan && make tf_apply
-```
+## 🏗 Architecture Overview
 
-## Reviewer quick start
+The solution builds a high-availability environment across two Availability Zones, enforcing a strict public/private subnet split.
 
-Use these commands to validate the submission quickly:
+### **Component Map**
 
-```bash
-make tf_init
-make tf_validate
-make tf_plan
-kustomize build k8s/overlays/prod
-```
+| Layer | Components | Purpose |
+| :--- | :--- | :--- |
+| **Network** | VPC, 2x Public/Private Subnets, NAT Gateway | Isolate workloads and provide secure egress. |
+| **Compute** | EKS Fargate (Default & Kube-system profiles) | Serverless Kubernetes execution (no node management). |
+| **Delivery** | Argo CD + Argo Image Updater | Automates deployment sync and ECR image promotion. |
+| **Security** | Security Groups (ALB/Pod/Cluster), IAM Roles | Implements the Principle of Least Privilege. |
 
-Design intent:
-- Treat Git as the source of truth for both infrastructure and delivery.
-- Keep infrastructure and application image workflows separate.
-- Make every change reviewable through CI before apply or push.
+### **Architecture Diagram**
+-----
 
-Why Terraform instead of CDK/CloudFormation:
-- The case study is testing IaC fundamentals, not a specific framework syntax.
-- Terraform still defines the full infrastructure declaratively in code, including the VPC, EKS Fargate cluster, and security groups.
-- I chose the tool I am most fluent with so the implementation stays clear, reviewable, and easy to reason about.
+![AWS EKS Fargate Architecture](image.png)
 
-## What is implemented
 
-1. AWS infrastructure in Terraform (no custom modules)
-- VPC with public/private subnets across 2 Availability Zones
-- Internet Gateway, NAT Gateway, route tables
-- EKS cluster
-- EKS Fargate profiles (`default`, `kube-system`)
-- IAM roles for cluster and Fargate pod execution
-- Security groups/rules that capture required firewall behavior
+## 🛠 Features & Implementation
 
-2. Kubernetes manifests (Kustomize)
-- Deployment for Flask app
-- Service
-- Ingress configured for AWS Load Balancer Controller (ALB)
-- Kustomize base and production overlay
+### **1. Infrastructure as Code (Terraform)**
 
-3. GitOps deployment via Argo CD
-- `.github/workflows/app-image.yml` builds and pushes the container image to ECR
-- `k8s/argocd/application.yaml` points Argo CD at the Kustomize prod overlay
-- Argo CD syncs the cluster from Git and can self-heal drift
-- The prod overlay uses a stable logical image name for the Flask application that is rewritten to the ECR repository by Kustomize
-- Argo CD Image Updater annotations give the application an image alias, restrict updates to the CI tag pattern, and write the selected tag back to Git
+  * **Pure Provider Logic:** No opaque custom modules; all resources are defined clearly for easy review.
+  * **Security Groups:** Hardened firewall rules including TCP 80/443 for ALB and internal VPC traffic for Pods.
+  * **IAM Roles:** Dedicated roles for Cluster management and Fargate Pod Execution.
 
-4. GitHub Actions CI/CD
-- `.github/workflows/config.yml`: Terraform fmt, init, validate, plan, artifact upload, automatic plan on push to `main`, and manual apply/destroy via `workflow_dispatch`
-- `.github/workflows/app-image.yml`: Docker build, Trivy scan, ECR repository check/create, and image push
+### **2. Application Delivery (Kustomize & Argo CD)**
 
-## Repository structure
+  * **Base/Overlay Pattern:** Uses Kustomize to manage environment-specific configurations.
+  * **Self-Healing:** Argo CD monitors Git for drift and automatically reconciles the cluster state.
+  * **Automated Promotion:** Argo CD Image Updater bridges ECR and Git, writing new image tags back to the repository automatically.
 
-- `terraform/`: all AWS IaC resources
-- `k8s/base/`: base Kubernetes deployment artifacts
-- `k8s/overlays/prod/`: prod overlay via Kustomize
-- `k8s/argocd/application.yaml`: Argo CD Application manifest
-- `.github/workflows/config.yml`: Terraform CI/CD workflow
-- `.github/workflows/app-image.yml`: application image build/scan/push workflow
+### **3. CI/CD Pipelines (GitHub Actions)**
 
-## Security rules mapping
+  * **`config.yml`**: Handles the Terraform lifecycle (Fmt, Validate, Plan, Apply).
+  * **`app-image.yml`**: Docker build, **Trivy security scanning**, and branch-aware ECR pushing.
 
-Required rules were translated into Terraform security groups as follows:
+-----
 
-- Allow all egress: enabled on ALB, cluster, and pod/workload security groups
-- Internet ingress:
-	- TCP 80 from `0.0.0.0/0`
-	- TCP 443 from `0.0.0.0/0`
-	- ICMP from `0.0.0.0/0`
-- Internal VPC traffic:
-	- All TCP within `vpc_cidr`
-	- All UDP within `vpc_cidr`
+## 🚀 Quick Start Guide
 
-## Architecture diagram
+### **Reviewer Validation**
 
-```mermaid
-flowchart LR
-	Internet((Internet)) --> ALB[ALB Ingress]
-	ALB --> SVC[K8s Service]
-	SVC --> POD1[Flask Pod]
-	SVC --> POD2[Flask Pod]
-
-	subgraph AWS VPC
-		subgraph Public Subnets
-			ALB
-		end
-
-		subgraph Private Subnets
-			EKS[EKS Control Plane]
-			Fargate[EKS Fargate Profiles]
-			SVC
-			POD1
-			POD2
-		end
-	end
-
-	EKS --> Fargate
-```
-
-## Prerequisites
-
-- Terraform >= 1.6
-- AWS CLI configured locally
-- kubectl
-- kustomize
-
-## Local usage
-
-1. Prepare Terraform inputs
-- Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars`
-- Edit values as needed
-
-2. Validate and plan
+Run these commands to quickly validate the codebase integrity:
 
 ```bash
-make tf_init
-make tf_fmt
-make tf_validate
-make tf_plan
+make tf_init && make tf_validate     # Validate Terraform syntax
+make tf_plan                        # View infrastructure diff
+kustomize build k8s/overlays/prod   # Inspect rendered K8s manifests
 ```
 
-3. Apply infrastructure
+### **Full Deployment**
 
-```bash
-make tf_apply
+1.  **Initialize Infrastructure:**
+    ```bash
+    cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+    make tf_init && make tf_plan && make tf_apply
+    ```
+2.  **Configure Access:**
+    ```bash
+    cd terraform && terraform output configure_kubectl
+    ```
+3.  **Deploy App:**
+    ```bash
+    # Update placeholders in k8s/base/ingress.yaml and argocd/application.yaml
+    kustomize build k8s/overlays/prod | kubectl apply -f -
+    ```
+
+-----
+
+## 🛡 Security Posture
+
+| Rule | Implementation |
+| :--- | :--- |
+| **Egress** | Allow all (ALB, Cluster, Pods) |
+| **Ingress (Public)** | TCP 80, 443, and ICMP from `0.0.0.0/0` |
+| **Ingress (Internal)** | All TCP/UDP within VPC CIDR |
+| **Container Scan** | Trivy scan fails pipeline on **Critical** findings |
+
+-----
+
+## 📂 Repository Structure
+
+```text
+├── .github/workflows/    # CI/CD for Terraform & Application
+├── terraform/            # AWS Infrastructure (VPC, EKS, IAM)
+├── k8s/
+│   ├── base/             # Common K8s manifests
+│   ├── overlays/prod/    # Production-specific Kustomization
+│   └── argocd/           # Argo CD Application spec
+└── Makefile              # Task automation wrapper
 ```
 
-4. Configure kubectl
+-----
 
-Use the Terraform output command:
+## 💡 Design Philosophy
 
-```bash
-cd terraform && terraform output configure_kubectl
-```
+> **"Automate everything, document the intent."**
 
-5. Render manifests
-
-```bash
-make k8s_render
-```
-
-6. Deploy manifests (after replacing placeholders)
-
-Update placeholders in the manifest files first:
-- `REPLACE_WITH_ECR_IMAGE_URI`
-- `REPLACE_WITH_ALB_SECURITY_GROUP_ID`
-- `REPLACE_WITH_ECR_REPOSITORY_URI`
-
-Then apply:
-
-```bash
-kustomize build k8s/overlays/prod | kubectl apply -f -
-```
-
-### Placeholder preflight
-
-This submission intentionally keeps AWS resource identifiers as placeholders so it remains portable and review-friendly. Before a real deployment, update:
-- `k8s/base/ingress.yaml` with the actual ALB security group ID
-- `k8s/argocd/application.yaml` with the actual ECR repository URI in Image Updater annotations
-
-## CI/CD behavior
-
-Terraform workflow (`config.yml`):
-- Runs plan automatically on `push` to `main` for infrastructure changes
-- Also supports manual trigger (`workflow_dispatch`) for controlled operations
-- Manual inputs: `action` (`plan`, `apply`, `destroy`) and `destroy_confirm`
-- Validates formatting, initialization, and configuration
-- Runs `terraform plan` and saves a plan artifact
-- Allows `apply`/`destroy` only on `main`
-- Requires `destroy_confirm=DESTROY` for destroy action
-- Uses workflow concurrency guard to avoid overlapping runs
-
-Application image workflow (`app-image.yml`):
-- Runs on `push` to `main` and `develop`
-- Builds the Docker image
-- Runs Trivy and fails on critical findings
-- Ensures the ECR repository exists, then pushes the image with branch-aware tags
-
-Argo CD deployment flow:
-- Argo CD watches the Git repository, not the ECR registry directly
-- When the image tag or digest in Git changes, Argo CD reconciles the cluster to that desired state
-- Argo CD Image Updater bridges the registry and Git by polling ECR for new image tags and updating the Kustomize overlay in Git
-- This repo uses immutable branch-aware tags from CI, for example `repo-name:e89a320-staging` and `repo-name:e89a320-prod`
-- The updater can then select the newest matching build and write it back to the overlay so Argo CD deploys the updated image
-
-### Path filter note (real-world practice)
-
-In this demo repository, path filters reduce unnecessary image pipeline runs in a mixed app + infra repo.
-
-In production, teams often split infrastructure and application code into separate repositories. In that setup, `git diff`-based change detection is usually a better trigger strategy than static path filters.
-
-## Assumptions
-
-- AWS authentication in GitHub Actions uses OIDC with `AWS_ROLE_TO_ASSUME` secret.
-- Region is supplied via GitHub variable `AWS_REGION` (default fallback is `us-east-1`).
-- AWS Load Balancer Controller is expected in cluster for Ingress reconciliation.
-- Argo CD is assumed to already be installed in the cluster namespace `argocd`.
-- Argo CD Image Updater is assumed to be installed if automated image promotion from ECR is desired.
-- This implementation intentionally avoids extra modules and abstraction to keep the submission easy to review.
-
-## Reliability posture
-
-This design addresses the original incident by:
-- Capturing network and cluster state declaratively in version control
-- Enforcing reviewable infrastructure diffs via CI plan
-- Enabling deterministic re-creation of deleted resources from source control
+  * **Why Terraform?** Chosen for its declarative clarity and team-wide familiarity, ensuring the IaC is readable and "reason-able."
+  * **Why Fargate?** To eliminate the operational overhead of managing EC2 worker nodes and patching.
+  * **Reliability Posture:** This design directly addresses recovery from accidental deletion by enabling deterministic re-creation from Git.
