@@ -1,9 +1,19 @@
 name: Terraform
 
-run-name: "terraform ${{ github.event_name }} @ ${{ github.head_ref || github.ref_name }}"
+run-name: "terraform ${{ github.event.inputs.action || 'plan' }} @ ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: Terraform action to run
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
 permissions:
   contents: read
   id-token: write
@@ -54,8 +64,14 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
+        if: github.event.inputs.action != 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform plan -out=tfplan
+
+      - name: Terraform Plan Destroy
+        if: github.event.inputs.action == 'destroy'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -destroy -out=tfplan
 
       - name: Save Plan Text
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -67,7 +83,21 @@ jobs:
           name: terraform-plan-${{ github.run_number }}
           path: ${{ env.TF_WORKING_DIR }}/.plan.txt
 
+      - name: Enforce main for mutating actions
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy'
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Mutating actions (apply/destroy) are only allowed on main."
+            exit 1
+          fi
+
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
+        if: github.event.inputs.action == 'apply'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Destroy (apply destroy plan)
+        if: github.event.inputs.action == 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
