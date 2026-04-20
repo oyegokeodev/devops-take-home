@@ -1,8 +1,13 @@
 name: Terraform
 
-run-name: "terraform ${{ github.event.inputs.action || 'plan' }} (${{ github.event.inputs.environment || 'staging' }}) @ ${{ github.ref_name }}"
+run-name: "terraform ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action || 'plan' }} @ ${{ github.ref_name }}"
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - terraform/**
+      - .github/workflows/config.yml
   workflow_dispatch:
     inputs:
       action:
@@ -14,14 +19,11 @@ on:
           - plan
           - apply
           - destroy
-      environment:
-        description: Target environment
-        required: true
-        default: staging
-        type: choice
-        options:
-          - staging
-          - prod
+      destroy_confirm:
+        description: Type DESTROY to confirm destroy action
+        required: false
+        default: ""
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -30,15 +32,18 @@ jobs:
   terraform-sync:
     name: Terraform Sync
     runs-on: ubuntu-latest
+    concurrency:
+      group: terraform-main
+      cancel-in-progress: false
 
     env:
       TF_WORKING_DIR: terraform
       TF_IN_AUTOMATION: true
       TF_INPUT: false
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-      TF_ENVIRONMENT: ${{ github.event.inputs.environment }}
-      TF_CLUSTER_NAME: max-fargate-cluster-${{ github.event.inputs.environment }}
-      TF_TAGS: '{Project="devops-take-home",ManagedBy="terraform",Environment="${{ github.event.inputs.environment }}"}'
+      TF_ACTION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action || 'plan' }}
+      TF_CLUSTER_NAME: max-fargate-cluster
+      TF_TAGS: '{Project="devops-take-home",ManagedBy="terraform"}'
 
     steps:
       - name: Checkout
@@ -70,18 +75,12 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
-      - name: Select Terraform Workspace
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: bash
-        run: |
-          terraform workspace select "${TF_ENVIRONMENT}" || terraform workspace new "${TF_ENVIRONMENT}"
-
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
       - name: Terraform Plan
-        if: github.event.inputs.action != 'destroy'
+        if: env.TF_ACTION != 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform plan \
@@ -90,7 +89,7 @@ jobs:
             -out=tfplan
 
       - name: Terraform Plan Destroy
-        if: github.event.inputs.action == 'destroy'
+        if: env.TF_ACTION == 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform plan -destroy \
@@ -105,11 +104,11 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-${{ env.TF_ENVIRONMENT }}-${{ github.run_number }}
+          name: terraform-plan-${{ github.run_number }}
           path: ${{ env.TF_WORKING_DIR }}/tfplan.txt
 
       - name: Enforce main for mutating actions
-        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy'
+        if: env.TF_ACTION == 'apply' || env.TF_ACTION == 'destroy'
         shell: bash
         run: |
           if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
@@ -117,12 +116,21 @@ jobs:
             exit 1
           fi
 
+      - name: Enforce destroy confirmation
+        if: env.TF_ACTION == 'destroy'
+        shell: bash
+        run: |
+          if [ "${{ github.event.inputs.destroy_confirm }}" != "DESTROY" ]; then
+            echo "Destroy action requires destroy_confirm=DESTROY"
+            exit 1
+          fi
+
       - name: Terraform Apply
-        if: github.event.inputs.action == 'apply'
+        if: env.TF_ACTION == 'apply'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
       - name: Terraform Destroy (apply destroy plan)
-        if: github.event.inputs.action == 'destroy'
+        if: env.TF_ACTION == 'destroy'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan

@@ -168,13 +168,14 @@ kustomize build k8s/overlays/prod | kubectl apply -f -
 ## CI/CD behavior
 
 Terraform workflow (`config.yml`):
-- Runs on manual trigger (`workflow_dispatch`)
-- Takes inputs: `action` (`plan`, `apply`, `destroy`) and `environment` (`staging`, `prod`)
-- Uses Terraform workspace per environment for state isolation
-- Applies environment-specific resource naming (for example, `max-fargate-cluster-staging`)
+- Runs plan automatically on `push` to `main` for infrastructure changes
+- Also supports manual trigger (`workflow_dispatch`) for controlled operations
+- Manual inputs: `action` (`plan`, `apply`, `destroy`) and `destroy_confirm`
 - Validates formatting, initialization, and configuration
 - Runs `terraform plan` and saves a plan artifact
-- Applies when the workflow is dispatched against `main`
+- Allows `apply`/`destroy` only on `main`
+- Requires `destroy_confirm=DESTROY` for destroy action
+- Uses workflow concurrency guard to avoid overlapping runs
 
 Application image workflow (`app-image.yml`):
 - Runs on `push` to `main` and `develop`
