@@ -10,7 +10,6 @@ on:
       - Dockerfile
       - requirements.txt
       - .github/workflows/app-image.yml
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -87,7 +86,7 @@ jobs:
         run: docker build -t app-local:${{ steps.meta.outputs.image_tag }} .
 
       - name: Trivy scan (fail on severity 1 / CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           scan-type: image
           image-ref: app-local:${{ steps.meta.outputs.image_tag }}

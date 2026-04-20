@@ -3,10 +3,7 @@ name: Terraform
 run-name: "terraform ${{ github.event_name }} @ ${{ github.head_ref || github.ref_name }}"
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
   id-token: write
@@ -71,6 +68,6 @@ jobs:
           path: ${{ env.TF_WORKING_DIR }}/.plan.txt
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/main'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan

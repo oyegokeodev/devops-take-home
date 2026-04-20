@@ -168,10 +168,10 @@ kustomize build k8s/overlays/prod | kubectl apply -f -
 ## CI/CD behavior
 
 Terraform workflow (`config.yml`):
-- Runs on `push` and `pull_request` to `main`
+- Runs on manual trigger (`workflow_dispatch`)
 - Validates formatting, initialization, and configuration
 - Runs `terraform plan` and saves a plan artifact
-- Applies only on push to `main`
+- Applies when the workflow is dispatched against `main`
 
 Application image workflow (`app-image.yml`):
 - Runs on `push` to `main` and `develop`
