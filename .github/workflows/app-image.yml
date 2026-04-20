@@ -5,11 +5,6 @@ run-name: "image ${{ github.event_name }} @ ${{ github.head_ref || github.ref_na
 on:
   push:
     branches: [main, develop]
-    paths:
-      - app.py
-      - Dockerfile
-      - requirements.txt
-      - .github/workflows/app-image.yml
 
 permissions:
   contents: read
